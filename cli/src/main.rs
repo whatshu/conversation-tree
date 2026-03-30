@@ -130,7 +130,7 @@ async fn handle_workspace(command: WorkspaceCommand, client: &ApiClient, config:
 }
 
 async fn handle_chat(command: ChatCommand, client: &ApiClient, config: &mut CliConfig) -> Result<()> {
-    let workspace_id = resolve_workspace_id(command.workspace, config)?;
+    let workspace_id = resolve_workspace_id(client, command.workspace, config).await?;
     if let Some(from_ref) = command.from_ref {
         config.active_ref = Some(classify_ref(&from_ref));
         config.save()?;
@@ -153,41 +153,44 @@ async fn handle_chat(command: ChatCommand, client: &ApiClient, config: &mut CliC
             continue;
         }
         let request = build_chat_request(prompt, config);
-        let events = client.stream_chat(&workspace_id, &request).await?;
-        for event in events {
-            match event.event.as_str() {
-                "token" => {
-                    if let Some(text) = event.data.get("text").and_then(|value| value.as_str()) {
-                        print!("{}", text);
-                        io::stdout().flush().ok();
+        let mut next_ref = config.active_ref.clone();
+        let mut printed_tokens = false;
+        client
+            .stream_chat(&workspace_id, &request, |event| {
+                match event.event.as_str() {
+                    "token" => {
+                        if let Some(text) = event.data.get("text").and_then(|value| value.as_str()) {
+                            printed_tokens = true;
+                            print!("{}", text);
+                            io::stdout().flush().ok();
+                        }
                     }
-                }
-                "assistant_final" => {
-                    println!();
-                }
-                "node_saved" => {
-                    if let Some(node_id) = event.data.get("node_id").and_then(|value| value.as_str()) {
-                        config.active_ref = Some(ActiveRef {
-                            kind: "node".to_string(),
-                            value: node_id.to_string(),
-                        });
-                        config.save()?;
+                    "assistant_final" => {
+                        if printed_tokens {
+                            println!();
+                        }
                     }
-                }
-                "summary_status" => {
-                    if let Some(status) = event.data.get("status").and_then(|value| value.as_str()) {
-                        println!("[summary:{}]", status);
+                    "node_saved" => {
+                        next_ref = next_active_ref_from_event(event.data.clone());
                     }
+                    "summary_status" => {
+                        if let Some(status) = event.data.get("status").and_then(|value| value.as_str()) {
+                            println!("[summary:{}]", status);
+                        }
+                    }
+                    "tool_call" | "tool_result" => {
+                        println!("{}", event.data);
+                    }
+                    "error" => {
+                        return Err(anyhow!("server error: {}", event.data));
+                    }
+                    _ => {}
                 }
-                "tool_call" | "tool_result" => {
-                    println!("{}", event.data);
-                }
-                "error" => {
-                    return Err(anyhow!("server error: {}", event.data));
-                }
-                _ => {}
-            }
-        }
+                Ok(())
+            })
+            .await?;
+        config.active_ref = next_ref;
+        config.save()?;
     }
     Ok(())
 }
@@ -335,9 +338,14 @@ async fn handle_inline_command(prompt: &str, client: &ApiClient, config: &mut Cl
     }
 }
 
-fn resolve_workspace_id(explicit: Option<String>, config: &CliConfig) -> Result<String> {
+async fn resolve_workspace_id(explicit_client: &ApiClient, explicit: Option<String>, config: &CliConfig) -> Result<String> {
     if let Some(value) = explicit {
-        return Ok(value);
+        let workspaces = explicit_client.list_workspaces().await?;
+        let workspace = workspaces
+            .into_iter()
+            .find(|item| item.id == value || item.name == value)
+            .ok_or_else(|| anyhow!("workspace not found: {}", value))?;
+        return Ok(workspace.id);
     }
     config
         .active_workspace_id
@@ -374,7 +382,46 @@ fn build_chat_request(prompt: &str, config: &CliConfig) -> ChatRequest {
         None => ChatRequest {
             prompt: prompt.to_string(),
             parent_node_id: None,
-            branch_name: None,
+            branch_name: Some("main".to_string()),
         },
+    }
+}
+
+fn next_active_ref_from_event(data: serde_json::Value) -> Option<ActiveRef> {
+    if let Some(branch_name) = data.get("branch_name").and_then(|value| value.as_str()) {
+        return Some(ActiveRef {
+            kind: "branch".to_string(),
+            value: branch_name.to_string(),
+        });
+    }
+    data.get("node_id")
+        .and_then(|value| value.as_str())
+        .map(|node_id| ActiveRef {
+            kind: "node".to_string(),
+            value: node_id.to_string(),
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_chat_request_defaults_to_main_branch() {
+        let config = CliConfig::default();
+        let request = build_chat_request("hello", &config);
+        assert_eq!(request.branch_name.as_deref(), Some("main"));
+        assert!(request.parent_node_id.is_none());
+    }
+
+    #[test]
+    fn node_saved_event_prefers_branch_reference() {
+        let data = serde_json::json!({
+            "node_id": "n-1",
+            "branch_name": "main"
+        });
+        let active = next_active_ref_from_event(data).expect("ref should exist");
+        assert_eq!(active.kind, "branch");
+        assert_eq!(active.value, "main");
     }
 }

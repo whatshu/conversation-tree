@@ -203,7 +203,20 @@ impl ApiClient {
             .context("failed to decode trace")
     }
 
-    pub async fn stream_chat(&self, workspace_id: &str, payload: &ChatRequest) -> Result<Vec<SseEvent>> {
+    pub async fn stream_chat_collect(&self, workspace_id: &str, payload: &ChatRequest) -> Result<Vec<SseEvent>> {
+        let mut events = Vec::new();
+        self.stream_chat(workspace_id, payload, |event| {
+            events.push(event.clone());
+            Ok(())
+        })
+        .await?;
+        Ok(events)
+    }
+
+    pub async fn stream_chat<F>(&self, workspace_id: &str, payload: &ChatRequest, mut on_event: F) -> Result<()>
+    where
+        F: FnMut(&SseEvent) -> Result<()>,
+    {
         let response = self
             .client
             .post(format!(
@@ -216,7 +229,6 @@ impl ApiClient {
             .error_for_status()?;
         let mut stream = response.bytes_stream();
         let mut buffer = String::new();
-        let mut events = Vec::new();
         while let Some(chunk) = stream.next().await {
             let chunk = chunk?;
             buffer.push_str(&String::from_utf8_lossy(&chunk));
@@ -224,11 +236,11 @@ impl ApiClient {
                 let frame = buffer[..index].to_string();
                 buffer = buffer[index + 2..].to_string();
                 if let Some(event) = parse_sse_frame(&frame)? {
-                    events.push(event);
+                    on_event(&event)?;
                 }
             }
         }
-        Ok(events)
+        Ok(())
     }
 }
 
