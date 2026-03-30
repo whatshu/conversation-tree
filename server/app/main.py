@@ -7,8 +7,7 @@ from fastapi import FastAPI
 
 from app.api.routes import router
 from app.core.config import get_settings
-from app.db.base import Base
-from app.db.session import engine
+from app.db.bootstrap import ensure_database_ready
 
 
 settings = get_settings()
@@ -19,7 +18,7 @@ app = FastAPI(title="Conversation Tree API", version="0.1.0")
 
 @app.on_event("startup")
 def on_startup() -> None:
-    Base.metadata.create_all(bind=engine)
+    ensure_database_ready()
 
 
 @app.get("/health")

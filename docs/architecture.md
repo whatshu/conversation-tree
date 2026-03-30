@@ -21,7 +21,13 @@
 
 - 首次消息创建默认分支 `main`
 - 从当前 head 继续：沿原 branch 前进
-- 从历史节点继续：在成功生成新节点后自动创建新 branch
+- 从历史节点继续：在成功生成新节点后自动创建新 branch，默认名为 `branch/<timestamp>-<slug>`
+
+## 摘要链路
+
+- API 先写入 node、run 和 run_events，再把 `summary_task` 入队
+- worker 使用 provider 生成简短 summary，并写回 `run_summaries`
+- CLI 在 tree 视图里展示 summary，在 `show --trace` 里展示完整 trace
 
 ## 安全边界
 

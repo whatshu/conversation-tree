@@ -50,6 +50,7 @@ def test_stream_message_creates_node_and_main_branch(client):
     events = read_sse(response.text)
     assert any(event == "assistant_final" for event, _ in events)
     node_saved = next(data for event, data in events if event == "node_saved")
+    assert node_saved["branch_name"] == "main"
     tree = client.get(f"/v1/workspaces/{workspace['id']}/tree", headers=AUTH).json()
     assert tree["branches"][0]["name"] == "main"
     assert tree["nodes"][0]["id"] == node_saved["node_id"]
@@ -80,7 +81,30 @@ def test_branching_from_history_creates_auto_branch(client):
 
     tree = client.get(f"/v1/workspaces/{workspace['id']}/tree", headers=AUTH).json()
     assert len(tree["branches"]) == 2
+    assert third_saved["branch_name"].startswith("branch/")
     assert any(branch["head_node_id"] == third_saved["node_id"] for branch in tree["branches"])
+
+
+def test_continuing_from_current_head_keeps_same_branch(client):
+    workspace = create_workspace(client)
+    first = client.post(
+        f"/v1/workspaces/{workspace['id']}/messages/stream",
+        json={"prompt": "first"},
+        headers=AUTH,
+    )
+    first_saved = next(data for event, data in read_sse(first.text) if event == "node_saved")
+
+    second = client.post(
+        f"/v1/workspaces/{workspace['id']}/messages/stream",
+        json={"prompt": "follow up", "parent_node_id": first_saved["node_id"]},
+        headers=AUTH,
+    )
+    second_saved = next(data for event, data in read_sse(second.text) if event == "node_saved")
+    assert second_saved["branch_name"] == "main"
+
+    tree = client.get(f"/v1/workspaces/{workspace['id']}/tree", headers=AUTH).json()
+    assert len(tree["branches"]) == 1
+    assert tree["branches"][0]["head_node_id"] == second_saved["node_id"]
 
 
 def test_trace_and_summary_worker(client):
@@ -96,5 +120,5 @@ def test_trace_and_summary_worker(client):
     trace = client.get(f"/v1/workspaces/{workspace['id']}/nodes/{node_id}/trace", headers=AUTH)
     assert trace.status_code == 200
     body = trace.json()
-    assert body["summary"].startswith("Assistant generated")
+    assert body["summary"].startswith("Summary:")
     assert any(event["event_type"] == "tool_call" for event in body["events"])

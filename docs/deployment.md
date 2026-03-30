@@ -6,6 +6,11 @@
 2. 执行 `docker compose up --build`
 3. 确认 `http://127.0.0.1:8000/health` 返回正常
 
+## 数据库初始化
+
+- 服务启动时会优先执行 Alembic `upgrade head`
+- 如果本地开发环境缺少 migration 配置，则退回到 SQLAlchemy metadata 初始化
+
 ## 常见问题
 
 ### API token 不匹配

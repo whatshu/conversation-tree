@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import re
 
 from sqlalchemy import select
@@ -48,4 +49,5 @@ def ensure_main_branch(db: Session, workspace_id: str, head_node_id: str | None 
 def build_auto_branch_name(prompt: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", prompt.strip().lower()).strip("-")
     slug = slug[:24] or "branch"
-    return f"branch/{slug}"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    return f"branch/{timestamp}-{slug}"

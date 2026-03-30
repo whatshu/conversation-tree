@@ -20,6 +20,7 @@ from app.services.workspaces import build_auto_branch_name, ensure_main_branch
 class BranchResolution:
     branch: Branch | None
     auto_branch_needed: bool
+    branch_origin: str
 
 
 class ChatService:
@@ -82,7 +83,15 @@ class ChatService:
         self.db.commit()
 
         yield {"event": "assistant_final", "data": {"message": assistant_message}}
-        yield {"event": "node_saved", "data": {"node_id": node.id, "branch_id": branch.id if branch else None}}
+        yield {
+            "event": "node_saved",
+            "data": {
+                "node_id": node.id,
+                "branch_id": branch.id if branch else None,
+                "branch_name": branch.name if branch else None,
+                "branch_origin": resolution.branch_origin,
+            },
+        }
         yield {"event": "summary_status", "data": {"status": "queued", "run_id": run.id}}
 
     def _resolve_branch(
@@ -93,14 +102,31 @@ class ChatService:
             branch = self.db.scalars(
                 select(Branch).where(Branch.workspace_id == workspace_id, Branch.name == branch_name)
             ).first()
+            return BranchResolution(branch=branch, auto_branch_needed=False, branch_origin="explicit_branch")
+
+        if parent_node_id:
+            branch = self.db.scalars(
+                select(Branch).where(Branch.workspace_id == workspace_id, Branch.head_node_id == parent_node_id)
+            ).first()
+            if branch is not None:
+                return BranchResolution(branch=branch, auto_branch_needed=False, branch_origin="head_from_parent")
+
+            main_branch = self.db.scalars(
+                select(Branch).where(Branch.workspace_id == workspace_id, Branch.name == "main")
+            ).first()
+            auto_branch_needed = bool(
+                main_branch and main_branch.head_node_id and parent_node_id != main_branch.head_node_id
+            )
+            return BranchResolution(
+                branch=main_branch,
+                auto_branch_needed=auto_branch_needed,
+                branch_origin="historical_parent",
+            )
         else:
             branch = self.db.scalars(
                 select(Branch).where(Branch.workspace_id == workspace_id, Branch.name == "main")
             ).first()
-        auto_branch_needed = bool(
-            branch and parent_node_id and branch.head_node_id and parent_node_id != branch.head_node_id
-        )
-        return BranchResolution(branch=branch, auto_branch_needed=auto_branch_needed)
+        return BranchResolution(branch=branch, auto_branch_needed=False, branch_origin="default_main")
 
     def _finalize_branch(
         self,

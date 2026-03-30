@@ -4,15 +4,15 @@ import logging
 import time
 
 from app.core.config import get_settings
-from app.db.base import Base
-from app.db.session import SessionLocal, engine
+from app.db.bootstrap import ensure_database_ready
+from app.db.session import SessionLocal
 from app.services.summary_worker import process_one_summary_task
 
 
 def main() -> None:
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
-    Base.metadata.create_all(bind=engine)
+    ensure_database_ready()
     while True:
         with SessionLocal() as db:
             processed = process_one_summary_task(db)

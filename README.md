@@ -40,7 +40,9 @@ cargo run -- chat
 - 后端默认只绑定 `127.0.0.1:8000`
 - 所有 API 需要 `Authorization: Bearer <token>`
 - 分支从历史节点继续时自动创建，可后续重命名
+- 自动分支名默认形如 `branch/<timestamp>-<slug>`
 - agent/tool 明细保存在 trace 中，tree 视图默认只展示摘要
+- worker 会异步生成 AI summary，CLI 默认展示摘要，必要时可查看 trace
 
 更多细节见：
 
