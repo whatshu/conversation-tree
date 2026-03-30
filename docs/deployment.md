@@ -1,0 +1,23 @@
+# 部署与排障
+
+## 本地部署
+
+1. 创建 `.env`
+2. 执行 `docker compose up --build`
+3. 确认 `http://127.0.0.1:8000/health` 返回正常
+
+## 常见问题
+
+### API token 不匹配
+
+- 检查 CLI 配置中的 token 是否与 `.env` 一致
+
+### PostgreSQL 启动失败
+
+- 删除本地卷后重新启动
+- 检查 5432 端口占用
+
+### CLI 无法编译
+
+- 安装 Rust toolchain
+- 执行 `cargo test` 与 `cargo run`

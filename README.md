@@ -1,0 +1,50 @@
+# Conversation Tree
+
+一个本地优先的 conversation tree 应用，包含：
+
+- Rust CLI：聊天优先、少量 git 风格命令管理 tree
+- Python backend：FastAPI + LangGraph + PostgreSQL
+- Docker Compose：本地安全运行 `api + worker + postgres`
+
+## 项目结构
+
+- `cli/`：Rust 命令行前端
+- `server/`：Python HTTP 后端和 worker
+- `docs/`：架构、API、CLI 和部署文档
+
+## 快速开始
+
+1. 复制环境变量：
+
+```bash
+cp .env.example .env
+```
+
+2. 启动后端：
+
+```bash
+docker compose up --build
+```
+
+3. 安装并运行 CLI：
+
+```bash
+cd cli
+cargo run -- workspace new default
+cargo run -- workspace use default
+cargo run -- chat
+```
+
+## 当前实现说明
+
+- 后端默认只绑定 `127.0.0.1:8000`
+- 所有 API 需要 `Authorization: Bearer <token>`
+- 分支从历史节点继续时自动创建，可后续重命名
+- agent/tool 明细保存在 trace 中，tree 视图默认只展示摘要
+
+更多细节见：
+
+- [docs/architecture.md](docs/architecture.md)
+- [docs/api.md](docs/api.md)
+- [docs/cli.md](docs/cli.md)
+- [docs/deployment.md](docs/deployment.md)
