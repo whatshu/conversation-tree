@@ -20,6 +20,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     Workspace(WorkspaceCommand),
+    Config(ConfigCommand),
     Chat(ChatCommand),
     Tree(TreeCommand),
     Checkout(CheckoutCommand),
@@ -82,6 +83,18 @@ struct BranchCommand {
     action: BranchAction,
 }
 
+#[derive(Subcommand)]
+enum ConfigAction {
+    Show,
+    SetBaseUrl { url: String },
+}
+
+#[derive(Args)]
+struct ConfigCommand {
+    #[command(subcommand)]
+    action: ConfigAction,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -90,6 +103,7 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Workspace(command) => handle_workspace(command, &client, &mut config).await?,
+        Commands::Config(command) => handle_config(command, &mut config)?,
         Commands::Chat(command) => handle_chat(command, &client, &mut config).await?,
         Commands::Tree(command) => handle_tree(command, &client, &config).await?,
         Commands::Checkout(command) => handle_checkout(command, &mut config)?,
@@ -97,6 +111,30 @@ async fn main() -> Result<()> {
         Commands::Show(command) => handle_show(command, &client, &config).await?,
     }
 
+    Ok(())
+}
+
+fn handle_config(command: ConfigCommand, config: &mut CliConfig) -> Result<()> {
+    match command.action {
+        ConfigAction::Show => {
+            println!("base_url: {}", config.server_url);
+            println!("api_token: {}", mask_token(&config.api_token));
+            if let Some(workspace_id) = &config.active_workspace_id {
+                println!("active_workspace_id: {}", workspace_id);
+            }
+            if let Some(workspace_name) = &config.active_workspace_name {
+                println!("active_workspace_name: {}", workspace_name);
+            }
+            if let Some(active_ref) = &config.active_ref {
+                println!("active_ref: {} {}", active_ref.kind, active_ref.value);
+            }
+        }
+        ConfigAction::SetBaseUrl { url } => {
+            config.server_url = normalize_base_url(&url)?;
+            config.save()?;
+            println!("base_url set to {}", config.server_url);
+        }
+    }
     Ok(())
 }
 
@@ -402,6 +440,24 @@ fn next_active_ref_from_event(data: serde_json::Value) -> Option<ActiveRef> {
         })
 }
 
+fn normalize_base_url(url: &str) -> Result<String> {
+    let trimmed = url.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return Err(anyhow!("base url cannot be empty"));
+    }
+    if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
+        return Err(anyhow!("base url must start with http:// or https://"));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn mask_token(token: &str) -> String {
+    if token.len() <= 8 {
+        return "********".to_string();
+    }
+    format!("{}***{}", &token[..4], &token[token.len() - 2..])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -423,5 +479,17 @@ mod tests {
         let active = next_active_ref_from_event(data).expect("ref should exist");
         assert_eq!(active.kind, "branch");
         assert_eq!(active.value, "main");
+    }
+
+    #[test]
+    fn normalize_base_url_trims_trailing_slash() {
+        let url = normalize_base_url("http://127.0.0.1:8000/").expect("url should normalize");
+        assert_eq!(url, "http://127.0.0.1:8000");
+    }
+
+    #[test]
+    fn normalize_base_url_requires_http_scheme() {
+        let error = normalize_base_url("127.0.0.1:8000").expect_err("url should fail");
+        assert!(error.to_string().contains("http:// or https://"));
     }
 }

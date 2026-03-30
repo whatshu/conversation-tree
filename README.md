@@ -32,6 +32,7 @@ docker compose up --build
 cd cli
 cargo run -- workspace new default
 cargo run -- workspace use default
+cargo run -- config set-base-url http://127.0.0.1:8000
 cargo run -- chat
 ```
 
