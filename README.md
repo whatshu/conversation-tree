@@ -57,3 +57,18 @@ CLI 的 `base_url` 和 `api_token` 都支持两种配置方式：
 - [docs/api.md](docs/api.md)
 - [docs/cli.md](docs/cli.md)
 - [docs/deployment.md](docs/deployment.md)
+
+## 测试
+
+CLI 单元测试：
+
+```bash
+cd cli
+cargo test
+```
+
+后端单元测试：
+
+```bash
+docker compose run --build --rm api python -m pytest tests
+```

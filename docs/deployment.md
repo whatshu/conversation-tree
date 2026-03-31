@@ -6,6 +6,11 @@
 2. 执行 `docker compose up --build`
 3. 确认 `http://127.0.0.1:8000/health` 返回正常
 
+## Docker 暴露方式
+
+- API 容器内部绑定 `0.0.0.0`
+- 宿主机仍只通过 `127.0.0.1:8000` 暴露，保持本机可访问、局域网默认不可访问
+
 ## 数据库初始化
 
 - 服务启动时会优先执行 Alembic `upgrade head`
@@ -26,3 +31,7 @@
 
 - 安装 Rust toolchain
 - 执行 `cargo test` 与 `cargo run`
+
+### 后端测试
+
+- 执行 `docker compose run --build --rm api python -m pytest tests`

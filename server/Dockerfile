@@ -8,6 +8,6 @@ WORKDIR /app
 COPY server/pyproject.toml /app/pyproject.toml
 COPY server/app /app/app
 COPY server/tests /app/tests
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir ".[dev]"
 
 CMD ["python", "-m", "app.main"]

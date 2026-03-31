@@ -41,7 +41,9 @@ class MockProvider(BaseProvider):
     ) -> ProviderResponse:
         suffix = f" Tool result: {tool_output}." if tool_output else ""
         clean = re.sub(r"\s+", " ", prompt.strip())
-        if system_prompt and "summary" in system_prompt.lower():
+        if (system_prompt and "summary" in system_prompt.lower()) or clean.lower().startswith(
+            "summarize what happened between two conversation-tree nodes."
+        ):
             compact = clean[:160]
             return ProviderResponse(content=f"Summary: {compact}")
         return ProviderResponse(content=f"Mock assistant reply to: {clean}.{suffix}".strip())

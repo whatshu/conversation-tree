@@ -160,10 +160,24 @@ mod tests {
     }
 
     #[test]
-    fn default_source_is_marked_as_default() {
-        let config = CliConfig::default();
-        assert_eq!(config.server_url_source().expect("source should resolve"), "default");
-        assert_eq!(config.api_token_source().expect("source should resolve"), "default");
+    fn explicit_config_values_can_be_selected_as_source() {
+        let config = CliConfig {
+            server_url: "http://localhost:9999".to_string(),
+            api_token: "token-from-config".to_string(),
+            active_workspace_id: None,
+            active_workspace_name: None,
+            active_ref: None,
+        };
+        let (server_url, server_source) = config
+            .resolve_value("CT_UNUSED_SERVER_URL", &config.server_url)
+            .expect("server url should resolve");
+        let (api_token, api_source) = config
+            .resolve_value("CT_UNUSED_API_TOKEN", &config.api_token)
+            .expect("api token should resolve");
+        assert_eq!(server_url, "http://localhost:9999");
+        assert_eq!(server_source, "config");
+        assert_eq!(api_token, "token-from-config");
+        assert_eq!(api_source, "config");
     }
 
     #[test]
