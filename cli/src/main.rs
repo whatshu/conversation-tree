@@ -87,6 +87,7 @@ struct BranchCommand {
 enum ConfigAction {
     Show,
     SetBaseUrl { url: String },
+    SetApiToken { token: String },
 }
 
 #[derive(Args)]
@@ -99,7 +100,7 @@ struct ConfigCommand {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let mut config = CliConfig::load()?;
-    let client = ApiClient::new(&config.server_url, &config.api_token)?;
+    let client = ApiClient::new(&config.resolved_server_url()?, &config.resolved_api_token()?)?;
 
     match cli.command {
         Commands::Workspace(command) => handle_workspace(command, &client, &mut config).await?,
@@ -117,8 +118,16 @@ async fn main() -> Result<()> {
 fn handle_config(command: ConfigCommand, config: &mut CliConfig) -> Result<()> {
     match command.action {
         ConfigAction::Show => {
-            println!("base_url: {}", config.server_url);
-            println!("api_token: {}", mask_token(&config.api_token));
+            println!(
+                "base_url: {} ({})",
+                config.resolved_server_url()?,
+                config.server_url_source()?
+            );
+            println!(
+                "api_token: {} ({})",
+                mask_token(&config.resolved_api_token()?),
+                config.api_token_source()?
+            );
             if let Some(workspace_id) = &config.active_workspace_id {
                 println!("active_workspace_id: {}", workspace_id);
             }
@@ -133,6 +142,11 @@ fn handle_config(command: ConfigCommand, config: &mut CliConfig) -> Result<()> {
             config.server_url = normalize_base_url(&url)?;
             config.save()?;
             println!("base_url set to {}", config.server_url);
+        }
+        ConfigAction::SetApiToken { token } => {
+            config.api_token = normalize_api_token(&token)?;
+            config.save()?;
+            println!("api_token updated in config");
         }
     }
     Ok(())
@@ -451,6 +465,14 @@ fn normalize_base_url(url: &str) -> Result<String> {
     Ok(trimmed.to_string())
 }
 
+fn normalize_api_token(token: &str) -> Result<String> {
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("api token cannot be empty"));
+    }
+    Ok(trimmed.to_string())
+}
+
 fn mask_token(token: &str) -> String {
     if token.len() <= 8 {
         return "********".to_string();
@@ -491,5 +513,11 @@ mod tests {
     fn normalize_base_url_requires_http_scheme() {
         let error = normalize_base_url("127.0.0.1:8000").expect_err("url should fail");
         assert!(error.to_string().contains("http:// or https://"));
+    }
+
+    #[test]
+    fn normalize_api_token_rejects_empty_value() {
+        let error = normalize_api_token("   ").expect_err("token should fail");
+        assert!(error.to_string().contains("cannot be empty"));
     }
 }

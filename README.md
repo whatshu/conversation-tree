@@ -33,8 +33,14 @@ cd cli
 cargo run -- workspace new default
 cargo run -- workspace use default
 cargo run -- config set-base-url http://127.0.0.1:8000
+cargo run -- config set-api-token change-me-local-token
 cargo run -- chat
 ```
+
+CLI 的 `base_url` 和 `api_token` 都支持两种配置方式：
+
+- 在 `.env` 中配置 `CT_SERVER_URL` 和 `CT_API_TOKEN`
+- 用 `ct config set-base-url ...` / `ct config set-api-token ...` 写入本地 config
 
 ## 当前实现说明
 
